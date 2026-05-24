@@ -1,2 +1,2 @@
 # SumSnap
-voice to sum application
+voice to sum application!
