@@ -1,0 +1,1754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SumSnap — Offline</title>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: rgba(255,255,255,0.03);
+            --border: rgba(255,255,255,0.08);
+            --text: #ffffff;
+            --text-secondary: rgba(255,255,255,0.5);
+            --accent-red: #ff375f;
+            --accent-blue: #0a84ff;
+            --accent-green: #30d158;
+            --accent-orange: #ff9f0a;
+            --glass: rgba(20,20,30,0.85);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 24px 20px;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ══ PERMISSION GATE ══════════════════════════════════════ */
+        #permGate {
+            position: fixed; inset: 0;
+            background: var(--bg);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 999; padding: 20px;
+            gap: 16px; overflow-y: auto;
+        }
+        #permGate.hidden { display: none; }
+
+        /* ── step indicator ── */
+        .perm-steps {
+            display: flex; gap: 8px; margin-bottom: 4px;
+        }
+        .perm-step-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            transition: all 0.3s ease;
+        }
+        .perm-step-dot.active { background: var(--accent-blue); transform: scale(1.3); }
+        .perm-step-dot.done   { background: var(--accent-green); }
+
+        /* ── card ── */
+        .perm-card {
+            width: 100%; max-width: 380px;
+            background: rgba(255,255,255,0.035);
+            border: 1px solid var(--border);
+            border-radius: 28px;
+            padding: 32px 24px 24px;
+            text-align: center;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+        }
+
+        /* ── icon with animated ring ── */
+        .perm-icon-wrap {
+            position: relative; display: inline-flex;
+            align-items: center; justify-content: center;
+            width: 80px; height: 80px; margin: 0 auto 20px;
+        }
+        .perm-icon-ring {
+            position: absolute; inset: 0; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.08);
+        }
+        .perm-icon-ring.pulse {
+            animation: ring-pulse 2.4s ease infinite;
+        }
+        .perm-icon-bg {
+            width: 64px; height: 64px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8rem;
+        }
+        .perm-icon-bg.mic  { background: linear-gradient(135deg,rgba(255,55,95,0.2),rgba(255,107,107,0.1)); border:1px solid rgba(255,55,95,0.25); }
+        .perm-icon-bg.cam  { background: linear-gradient(135deg,rgba(10,132,255,0.2),rgba(90,200,250,0.1)); border:1px solid rgba(10,132,255,0.25); }
+        .perm-icon-bg.done { background: linear-gradient(135deg,rgba(48,209,88,0.2),rgba(52,199,89,0.1)); border:1px solid rgba(48,209,88,0.25); }
+
+        .perm-title {
+            font-size: 1.2rem; font-weight: 700;
+            letter-spacing: -0.4px; margin-bottom: 10px;
+        }
+        .perm-why {
+            font-size: 0.82rem; color: var(--text-secondary);
+            line-height: 1.65; margin-bottom: 8px;
+        }
+        .perm-privacy {
+            font-size: 0.72rem; color: rgba(255,255,255,0.28);
+            margin-bottom: 24px; line-height: 1.5;
+        }
+        .perm-privacy span { color: var(--accent-green); }
+
+        /* ── main action button ── */
+        .perm-action {
+            width: 100%; padding: 16px; border-radius: 16px;
+            font-size: 1rem; font-weight: 700; border: none;
+            cursor: pointer; transition: all 0.25s ease;
+            display: flex; align-items: center; justify-content: center; gap: 12px;
+            margin-bottom: 10px; letter-spacing: -0.2px;
+        }
+        .perm-action.mic { background: linear-gradient(135deg,#ff375f,#ff6b6b); color:#fff; box-shadow:0 4px 20px rgba(255,55,95,0.35); }
+        .perm-action.cam { background: linear-gradient(135deg,#0a84ff,#5ac8fa); color:#fff; box-shadow:0 4px 20px rgba(10,132,255,0.35); }
+        .perm-action.done { background: linear-gradient(135deg,#30d158,#34c759); color:#fff; box-shadow:0 4px 20px rgba(48,209,88,0.3); }
+        .perm-action:hover { transform: translateY(-2px); filter: brightness(1.08); }
+        .perm-action:active { transform: scale(0.97); }
+        .perm-action:disabled { opacity: 0.45; cursor: not-allowed; transform: none; filter: none; }
+
+        /* ── skip / secondary ── */
+        .perm-skip {
+            width: 100%; padding: 12px; border-radius: 12px;
+            font-size: 0.85rem; font-weight: 500; border: none;
+            cursor: pointer; background: transparent; color: rgba(255,255,255,0.35);
+            transition: color 0.2s;
+        }
+        .perm-skip:hover { color: rgba(255,255,255,0.6); }
+
+        /* ── status line under button ── */
+        .perm-status {
+            min-height: 22px; font-size: 0.78rem; text-align: center;
+            margin-top: 6px; transition: all 0.3s;
+        }
+        .perm-status.ok  { color: var(--accent-green); }
+        .perm-status.err { color: var(--accent-red); }
+        .perm-status.info { color: var(--accent-orange); }
+
+        /* ── insecure context warning (file://) ── */
+        .perm-warn-box {
+            width: 100%; max-width: 380px;
+            background: rgba(255,159,10,0.07);
+            border: 1px solid rgba(255,159,10,0.2);
+            border-radius: 16px; padding: 14px 18px;
+            display: none;
+        }
+        .perm-warn-box.show { display: block; }
+        .perm-warn-title {
+            font-size: 0.78rem; font-weight: 700;
+            color: var(--accent-orange); margin-bottom: 6px;
+        }
+        .perm-warn-body {
+            font-size: 0.74rem; color: rgba(255,200,100,0.75); line-height: 1.7;
+        }
+        .perm-warn-body code {
+            background: rgba(255,255,255,0.1); padding: 1px 6px;
+            border-radius: 4px; font-family: monospace; font-size: 0.72rem; color: #fff;
+        }
+
+        @keyframes ring-pulse {
+            0%,100% { transform: scale(1); opacity: 0.4; }
+            50%      { transform: scale(1.18); opacity: 0.1; }
+        }
+
+        /* ══ MAIN APP ═══════════════════════════════════════════════ */
+        #app { width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+        .header {
+            width: 100%; max-width: 420px;
+            display: flex; justify-content: center; align-items: center;
+            margin-bottom: 28px;
+            animation: fadeSlideDown 0.5s ease forwards;
+        }
+        .logo {
+            font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px;
+            background: linear-gradient(135deg,#fff,rgba(255,255,255,0.45));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        /* permission status pills */
+        .perm-pills {
+            display: flex; gap: 8px; margin-left: 12px;
+        }
+        .pill {
+            font-size: 0.6rem; font-weight: 700; letter-spacing: 1px;
+            text-transform: uppercase; padding: 3px 8px; border-radius: 6px;
+            -webkit-text-fill-color: initial;
+        }
+        .pill.granted { background: rgba(48,209,88,0.15); color: var(--accent-green); border:1px solid rgba(48,209,88,0.3); }
+        .pill.denied  { background: rgba(255,55,95,0.12);  color: var(--accent-red);   border:1px solid rgba(255,55,95,0.3); }
+        .pill.unknown { background: rgba(255,255,255,0.06); color:var(--text-secondary); border:1px solid var(--border); }
+
+        .display {
+            width: 100%; max-width: 420px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 24px; padding: 24px; margin-bottom: 20px;
+            animation: fadeSlideUp 0.5s ease 0.1s both;
+        }
+        .numbers-list {
+            display: flex; flex-wrap: wrap; gap: 10px;
+            margin-bottom: 16px; min-height: 48px; align-content: flex-start;
+        }
+        .num-chip {
+            background: linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03));
+            border: 1px solid var(--border); padding: 8px 22px 8px 14px;
+            border-radius: 14px; font-size: 1.05rem; font-weight: 500;
+            font-variant-numeric: tabular-nums;
+            animation: chipIn 0.35s ease forwards;
+            cursor: pointer; position: relative; transition: all 0.25s;
+        }
+        .num-chip:hover { transform: translateY(-2px); border-color: rgba(255,255,255,0.2); }
+        .num-chip::after {
+            content:'×'; position:absolute; right:7px; top:50%;
+            transform:translateY(-50%); font-size:0.75rem;
+            color:var(--accent-red); opacity:0; transition:opacity 0.2s;
+        }
+        .num-chip:hover::after { opacity:1; }
+        .num-chip.removing { animation: chipOut 0.3s ease forwards; }
+
+        .empty { color:var(--text-secondary); font-size:0.9rem; display:flex; align-items:center; gap:8px; padding:8px 0; }
+        .sum-divider { height:1px; background:linear-gradient(90deg,transparent,var(--border),transparent); margin:4px 0 16px; }
+        .sum-line { display:flex; justify-content:space-between; align-items:baseline; padding:0 4px; }
+        .sum-label { color:var(--text-secondary); font-size:0.8rem; font-weight:600; letter-spacing:1px; text-transform:uppercase; }
+        .sum-value {
+            font-size:2.2rem; font-weight:700; font-variant-numeric:tabular-nums;
+            letter-spacing:-1px; transition:all 0.3s ease;
+        }
+        .sum-value.pop { transform:scale(1.1); color:var(--accent-green); }
+
+        .btn-row {
+            display:flex; gap:14px; width:100%; max-width:420px;
+            animation:fadeSlideUp 0.5s ease 0.2s both;
+        }
+        button {
+            flex:1; padding:18px; border:none; border-radius:18px;
+            font-size:1rem; font-weight:600; cursor:pointer;
+            transition:all 0.25s ease; display:flex; align-items:center;
+            justify-content:center; gap:10px; position:relative; overflow:hidden;
+            letter-spacing:-0.3px;
+        }
+        button:active { transform:scale(0.96); }
+        button:disabled { opacity:0.35; cursor:not-allowed; transform:none !important; }
+
+        .mic-btn { background:linear-gradient(135deg,var(--accent-red),#ff6b6b); color:#fff; box-shadow:0 4px 20px rgba(255,55,95,0.3); }
+        .mic-btn:not(:disabled):hover { box-shadow:0 6px 28px rgba(255,55,95,0.45); transform:translateY(-2px); }
+        .mic-btn.listening {
+            animation:pulse-ring 1.4s ease infinite;
+            background:linear-gradient(135deg,var(--accent-orange),#ffb340);
+            box-shadow:0 4px 20px rgba(255,159,10,0.3);
+        }
+        .cam-btn  { background:linear-gradient(135deg,var(--accent-blue),#5ac8fa); color:#fff; box-shadow:0 4px 20px rgba(10,132,255,0.3); }
+        .cam-btn:not(:disabled):hover  { box-shadow:0 6px 28px rgba(10,132,255,0.45); transform:translateY(-2px); }
+        .img-btn  { background:linear-gradient(135deg,#5e5ce6,#bf5af2); color:#fff; box-shadow:0 4px 20px rgba(94,92,230,0.3); flex:0.75; }
+        .img-btn:not(:disabled):hover  { box-shadow:0 6px 28px rgba(94,92,230,0.45); transform:translateY(-2px); }
+
+        .status-wrap { width:100%; max-width:420px; height:28px; display:flex; align-items:center; justify-content:center; margin-top:10px; }
+        .status {
+            font-size:0.82rem; color:var(--text-secondary); text-align:center;
+            opacity:0; transform:translateY(4px); transition:all 0.3s ease;
+        }
+        .status.on { opacity:1; transform:translateY(0); }
+        .status.ok  { color:var(--accent-green); }
+        .status.err { color:var(--accent-red); }
+        .status.proc { color:var(--accent-orange); }
+
+        .clear-btn {
+            width:100%; max-width:420px; margin-top:12px;
+            background:var(--surface); color:var(--accent-red);
+            border:1px solid var(--border); font-size:0.88rem; padding:14px;
+            animation:fadeSlideUp 0.5s ease 0.3s both;
+        }
+        .clear-btn:hover { background:rgba(255,55,95,0.08); border-color:rgba(255,55,95,0.3); }
+
+        /* camera overlay */
+        .cam-overlay {
+            position:fixed; inset:0; background:rgba(0,0,0,0.97);
+            display:none; flex-direction:column; align-items:center; justify-content:center;
+            z-index:100; opacity:0; transition:opacity 0.35s ease;
+        }
+        .cam-overlay.active { display:flex; }
+        .cam-overlay.in     { opacity:1; }
+
+        .cam-wrap {
+            position:relative; width:90%; max-width:400px;
+            border-radius:24px; overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,0.5);
+        }
+        video { width:100%; display:block; }
+
+        .cam-frame {
+            position:absolute; inset:20px;
+            border:1.5px solid rgba(255,255,255,0.25); border-radius:16px; pointer-events:none;
+        }
+        .cam-frame::before,.cam-frame::after {
+            content:''; position:absolute; width:22px; height:22px;
+            border-color:var(--accent-green); border-style:solid;
+        }
+        .cam-frame::before { top:-2px; left:-2px; border-width:3px 0 0 3px; border-radius:12px 0 0 0; }
+        .cam-frame::after  { bottom:-2px; right:-2px; border-width:0 3px 3px 0; border-radius:0 0 12px 0; }
+
+        .scan-bar {
+            position:absolute; left:0; right:0; height:2px;
+            background:var(--accent-green); box-shadow:0 0 10px var(--accent-green);
+            display:none; animation:scanMove 2s ease-in-out infinite;
+        }
+        .scanning .scan-bar { display:block; }
+
+        .close-cam {
+            position:absolute; top:20px; right:20px; width:44px; height:44px;
+            border-radius:50%; background:rgba(255,255,255,0.1);
+            border:1px solid rgba(255,255,255,0.2); color:#fff;
+            font-size:1.2rem; cursor:pointer; display:flex;
+            align-items:center; justify-content:center; transition:all 0.25s; flex:none; z-index:5;
+        }
+        .close-cam:hover { background:rgba(255,255,255,0.2); transform:rotate(90deg); }
+
+        .shutter-wrap { margin-top:28px; display:flex; flex-direction:column; align-items:center; gap:12px; }
+        .shutter {
+            width:72px; height:72px; border-radius:50%; background:#fff;
+            border:4px solid rgba(255,255,255,0.3); cursor:pointer; position:relative;
+            transition:all 0.25s ease; box-shadow:0 4px 24px rgba(0,0,0,0.35);
+        }
+        .shutter::after { content:''; position:absolute; inset:5px; border-radius:50%; background:#fff; }
+        .shutter:hover  { transform:scale(1.08); }
+        .shutter:active { transform:scale(0.91); }
+        .cam-hint { color:var(--text-secondary); font-size:0.82rem; }
+
+        .toast {
+            position:fixed; bottom:36px; left:50%;
+            transform:translateX(-50%) translateY(80px);
+            background:var(--glass); border:1px solid var(--border);
+            padding:11px 22px; border-radius:14px; font-size:0.88rem;
+            color:var(--text); z-index:400; opacity:0;
+            transition:all 0.45s cubic-bezier(0.22,1,0.36,1); white-space:nowrap;
+            backdrop-filter:blur(20px);
+        }
+        .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+        .toast.ok  { border-color:rgba(48,209,88,0.5);  color:#b8f5c8; }
+        .toast.err { border-color:rgba(255,55,95,0.5);  color:#ffb3c1; }
+        .toast.warn { border-color:rgba(255,159,10,0.5); color:#ffe0a0; }
+
+        #fileInput { display:none; }
+
+
+        /* ══ KEYBOARD PANEL ════════════════════════════════════════ */
+        .kbd-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 200;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(4px);
+        }
+        .kbd-overlay.open { opacity: 1; pointer-events: all; }
+
+        .kbd-panel {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: #13131a;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            border-radius: 28px 28px 0 0;
+            padding: 14px 16px 32px;
+            z-index: 201;
+            transform: translateY(100%);
+            transition: transform 0.38s cubic-bezier(0.22,1,0.36,1);
+            max-width: 480px;
+            margin: 0 auto;
+        }
+        .kbd-panel.open { transform: translateY(0); }
+
+        /* drag handle */
+        .kbd-handle {
+            width: 40px; height: 4px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            margin: 0 auto 16px;
+        }
+
+        /* display row */
+        .kbd-display {
+            display: flex; align-items: center;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 12px 16px;
+            margin-bottom: 14px;
+            gap: 10px;
+        }
+        .kbd-input {
+            flex: 1;
+            font-size: 2rem; font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -1px;
+            color: #fff;
+            min-width: 0;
+            word-break: break-all;
+            line-height: 1.1;
+        }
+        .kbd-input.empty { color: rgba(255,255,255,0.2); font-size: 1.2rem; font-weight: 400; }
+        .kbd-backspace {
+            flex: none; width: 44px; height: 44px;
+            border-radius: 12px;
+            background: rgba(255,55,95,0.12);
+            border: 1px solid rgba(255,55,95,0.2);
+            color: var(--accent-red);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.18s ease;
+            font-size: 1.1rem;
+        }
+        .kbd-backspace:hover  { background: rgba(255,55,95,0.22); }
+        .kbd-backspace:active { transform: scale(0.9); }
+
+        /* grid */
+        .kbd-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .kbd-key {
+            height: 62px;
+            border-radius: 16px;
+            border: none;
+            font-size: 1.35rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s ease;
+            user-select: none;
+            -webkit-user-select: none;
+            position: relative;
+            overflow: hidden;
+        }
+        .kbd-key::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: rgba(255,255,255,0.12);
+            opacity: 0;
+            transition: opacity 0.1s;
+        }
+        .kbd-key:active::after { opacity: 1; }
+        .kbd-key:active        { transform: scale(0.94); }
+
+        /* digit keys */
+        .kbd-key.digit {
+            background: rgba(255,255,255,0.06);
+            color: #fff;
+            font-size: 1.4rem;
+        }
+        .kbd-key.digit:hover { background: rgba(255,255,255,0.1); }
+
+        /* zero — spans 2 columns */
+        .kbd-key.zero {
+            grid-column: span 2;
+            font-size: 1.4rem;
+        }
+
+        /* decimal dot */
+        .kbd-key.dot {
+            background: rgba(255,255,255,0.06);
+            color: rgba(255,255,255,0.7);
+            font-size: 1.8rem; line-height: 1;
+        }
+        .kbd-key.dot:hover { background: rgba(255,255,255,0.1); }
+        .kbd-key.dot:disabled { opacity: 0.25; cursor: default; }
+
+        /* add button — full width */
+        .kbd-add {
+            width: 100%;
+            height: 62px;
+            border-radius: 18px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-green), #34c759);
+            color: #fff;
+            font-size: 1.05rem;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 20px rgba(48,209,88,0.3);
+        }
+        .kbd-add:hover  { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 6px 28px rgba(48,209,88,0.4); }
+        .kbd-add:active { transform: scale(0.97); }
+        .kbd-add:disabled { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none; filter: none; }
+
+        /* manual entry row */
+        .manual-row {
+            display: flex; gap: 10px;
+            width: 100%; max-width: 420px;
+            margin-top: 14px;
+            animation: fadeSlideUp 0.5s ease 0.25s both;
+        }
+        .manual-input {
+            flex: 1; padding: 16px 18px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            color: #fff; font-size: 1.1rem;
+            font-weight: 600; font-variant-numeric: tabular-nums;
+            outline: none; transition: border-color 0.2s;
+            -webkit-appearance: none;
+        }
+        .manual-input::placeholder { color: rgba(255,255,255,0.25); font-weight: 400; }
+        .manual-input:focus { border-color: rgba(48,209,88,0.5); }
+        .manual-add {
+            padding: 16px 20px; border: none; border-radius: 16px;
+            background: linear-gradient(135deg, #30d158, #34c759);
+            color: #fff; font-size: 0.95rem; font-weight: 700;
+            cursor: pointer; white-space: nowrap;
+            box-shadow: 0 4px 16px rgba(48,209,88,0.3);
+            transition: all 0.2s ease; flex: none;
+        }
+        .manual-add:hover  { filter: brightness(1.08); transform: translateY(-1px); }
+        .manual-add:active { transform: scale(0.96); }
+
+        @keyframes fadeSlideUp   { from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeSlideDown { from{opacity:0;transform:translateY(-18px)}to{opacity:1;transform:translateY(0)} }
+        @keyframes chipIn  { from{opacity:0;transform:scale(0.78) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+        @keyframes chipOut { to{opacity:0;transform:scale(0.78) translateX(-18px)} }
+        @keyframes pulse-ring {
+            0%   {box-shadow:0 0 0 0 rgba(255,159,10,0.45);}
+            70%  {box-shadow:0 0 0 18px rgba(255,159,10,0);}
+            100% {box-shadow:0 0 0 0 rgba(255,159,10,0);}
+        }
+        @keyframes scanMove { 0%{top:0} 50%{top:100%} 100%{top:0} }
+    </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════
+     PERMISSION GATE  (shown before the app)
+════════════════════════════════════════════════════════ -->
+<div id="permGate">
+
+    <!-- Step dots -->
+    <div class="perm-steps">
+        <div class="perm-step-dot active" id="dot0"></div>
+        <div class="perm-step-dot"        id="dot1"></div>
+        <div class="perm-step-dot"        id="dot2"></div>
+    </div>
+
+    <!-- Card (content swaps per step) -->
+    <div class="perm-card" id="permCard">
+
+        <div class="perm-icon-wrap">
+            <div class="perm-icon-ring pulse" id="permRing"></div>
+            <div class="perm-icon-bg mic" id="permIconBg">🎤</div>
+        </div>
+
+        <div class="perm-title" id="permTitle">Microphone Access</div>
+
+        <div class="perm-why" id="permWhy">
+            SumSnap uses your microphone to hear numbers as you speak them — so you can add values hands-free without typing.
+        </div>
+
+        <div class="perm-privacy" id="permPrivacy">
+            🔒 Audio is processed <span>on-device only</span>. Nothing is recorded or sent anywhere.
+        </div>
+
+        <button class="perm-action mic" id="permActionBtn" onclick="handlePermAction()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" id="permBtnIcon">
+                <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+            <span id="permBtnLabel">Allow Microphone</span>
+        </button>
+
+        <div class="perm-status" id="permStatus"></div>
+
+        <button class="perm-skip" id="permSkipBtn" onclick="skipCurrentPerm()">
+            Skip this — I don't need voice input
+        </button>
+    </div>
+
+    <!-- Insecure context warning (file://) -->
+    <div class="perm-warn-box" id="permWarnBox">
+        <div class="perm-warn-title">⚠️ Browser may block mic &amp; camera</div>
+        <div class="perm-warn-body">
+            This file is open as <code>file://</code> which most browsers treat as
+            insecure. For mic &amp; camera to work, serve it locally:<br><br>
+            Open a terminal in this folder and run:<br>
+            <code>python3 -m http.server 8080</code><br>
+            Then open: <code>http://localhost:8080/SumSnap_Offline.html</code><br><br>
+            Or just tap <strong>Skip</strong> below — Image Upload works without any of this.
+        </div>
+    </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════════════════════ -->
+<div id="app" style="display:none; width:100%">
+
+    <div class="header">
+        <div class="logo">SumSnap</div>
+        <div class="perm-pills">
+            <span class="pill unknown" id="micPill">MIC</span>
+            <span class="pill unknown" id="camPill">CAM</span>
+        </div>
+    </div>
+
+    <div class="display">
+        <div class="numbers-list" id="numbersList">
+            <span class="empty">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.5">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+                </svg>
+                Tap mic or camera to add numbers
+            </span>
+        </div>
+        <div class="sum-divider"></div>
+        <div class="sum-line">
+            <span class="sum-label">Total Sum</span>
+            <span class="sum-value" id="sumValue">0</span>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <button class="mic-btn" id="micBtn" onclick="toggleMic()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>
+            </svg>
+            <span id="micText">Speak</span>
+        </button>
+        <button class="cam-btn" id="camBtn" onclick="openCamera()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+            </svg>
+            Scan
+        </button>
+        <button class="img-btn" onclick="document.getElementById('fileInput').click()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <rect x="3" y="3" width="18" height="18" rx="3"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            Image
+        </button>
+    </div>
+
+    <!-- manual entry -->
+    <div class="manual-row">
+        <input class="manual-input" id="manualInput"
+            type="number" inputmode="decimal"
+            placeholder="Type a number…"
+            onkeydown="if(event.key==='Enter') manualAdd()">
+        <button class="manual-add" onclick="manualAdd()">+ Add</button>
+    </div>
+
+    <div class="status-wrap">
+        <div class="status" id="status"></div>
+    </div>
+
+    <button class="clear-btn" onclick="clearAll()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:6px">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        Clear All
+    </button>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     CAMERA OVERLAY
+════════════════════════════════════════════════════════ -->
+<div class="cam-overlay" id="camOverlay">
+    <button class="close-cam" onclick="closeCamera()">✕</button>
+    <div class="cam-wrap" id="camWrap">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="cam-frame"></div>
+        <div class="scan-bar"></div>
+    </div>
+    <div class="shutter-wrap">
+        <div class="shutter" id="shutter" onclick="capture()"></div>
+        <div class="cam-hint">Point at numbers, tap to capture</div>
+    </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*" onchange="handleUpload(event)">
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  ENVIRONMENT & BROWSER CAPABILITY DETECTION
+// ════════════════════════════════════════════════════════
+const isSecure = (
+    location.protocol === 'https:' ||
+    location.hostname  === 'localhost' ||
+    location.hostname  === '127.0.0.1' ||
+    location.hostname  === ''  // some browsers allow file:// for local html
+);
+
+// Feature-detect what this browser supports
+const HAS_MEDIA   = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+const HAS_SPEECH  = !!( window.SpeechRecognition || window.webkitSpeechRecognition );
+const HAS_PERMS   = !!navigator.permissions;
+const IS_SAFARI   = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const IS_FIREFOX  = navigator.userAgent.toLowerCase().includes('firefox');
+
+// Show insecure-origin warning only when on file:// AND browser strictly blocks it
+if (location.protocol === 'file:') {
+    document.getElementById('permWarnBox').classList.add('show');
+}
+
+// ════════════════════════════════════════════════════════
+//  STEPPED PERMISSION GATE — one permission at a time
+// ════════════════════════════════════════════════════════
+let micGranted = false;
+let camGranted = false;
+let permStep   = 0; // 0=mic, 1=cam, 2=done
+
+const STEPS = [
+    {
+        id:      'mic',
+        title:   'Microphone Access',
+        why:     'SumSnap listens to numbers as you speak them — so you can add values hands-free without typing anything.',
+        privacy: '🔒 Audio stays <span>on your device</span>. Nothing is recorded or sent anywhere.',
+        btnLabel:'Allow Microphone',
+        btnClass:'mic',
+        skipTxt: "Skip — I don't need voice input",
+        iconSvg: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>`,
+        iconEmoji:'🎤', iconClass:'mic',
+        check: () => HAS_SPEECH && HAS_MEDIA,
+        unavailMsg: 'Voice input is not supported in this browser. Tap Skip to continue.',
+        grant: async () => {
+            // Safari needs audio:true getUserMedia; Chrome needs SpeechRecognition
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(t => t.stop());
+            micGranted = true;
+        }
+    },
+    {
+        id:      'cam',
+        title:   'Camera Access',
+        why:     'Point your camera at a page of handwritten numbers and SumSnap will read and add them all automatically.',
+        privacy: '🔒 Photos are analysed <span>on your device</span> using AI. Images are never stored or shared.',
+        btnLabel:'Allow Camera',
+        btnClass:'cam',
+        skipTxt: "Skip — I'll use Image Upload instead",
+        iconSvg: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
+        iconEmoji:'📷', iconClass:'cam',
+        check: () => HAS_MEDIA,
+        unavailMsg: 'Camera access is not supported in this browser. Tap Skip to continue.',
+        grant: async () => {
+            const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            stream.getTracks().forEach(t => t.stop());
+            camGranted = true;
+        }
+    }
+];
+
+function renderStep(idx) {
+    // Update dots
+    for (let i = 0; i < 3; i++) {
+        const dot = document.getElementById('dot' + i);
+        dot.className = 'perm-step-dot' +
+            (i < idx ? ' done' : i === idx ? ' active' : '');
+    }
+
+    if (idx >= STEPS.length) { launchApp(); return; }
+    const s = STEPS[idx];
+
+    // Check availability
+    const available = s.check();
+
+    document.getElementById('permTitle').textContent   = s.title;
+    document.getElementById('permWhy').textContent     = s.why;
+    document.getElementById('permPrivacy').innerHTML   = s.privacy;
+    document.getElementById('permSkipBtn').textContent = s.skipTxt;
+
+    const iconBg = document.getElementById('permIconBg');
+    iconBg.className  = 'perm-icon-bg ' + s.iconClass;
+    iconBg.textContent = s.iconEmoji;
+
+    const btn = document.getElementById('permActionBtn');
+    btn.className   = 'perm-action ' + s.btnClass;
+    btn.disabled    = !available;
+    btn.innerHTML   = s.iconSvg + `<span id="permBtnLabel">${s.btnLabel}</span>`;
+
+    setPermStatus(available ? '' : s.unavailMsg, available ? '' : 'info');
+}
+
+function setPermStatus(msg, type) {
+    const el = document.getElementById('permStatus');
+    el.textContent = msg;
+    el.className   = 'perm-status' + (type ? ' ' + type : '');
+}
+
+async function handlePermAction() {
+    const s   = STEPS[permStep];
+    const btn = document.getElementById('permActionBtn');
+    btn.disabled = true;
+    btn.querySelector('#permBtnLabel').textContent = 'Waiting for browser…';
+    setPermStatus('', '');
+
+    // Small delay so button state renders before browser blocks UI for dialog
+    await new Promise(r => setTimeout(r, 60));
+
+    try {
+        await s.grant();
+        setPermStatus('✓ Permission granted!', 'ok');
+        await new Promise(r => setTimeout(r, 700));
+        permStep++;
+        renderStep(permStep);
+    } catch(e) {
+        btn.disabled = false;
+        btn.querySelector('#permBtnLabel').textContent = s.btnLabel;
+
+        let msg = '';
+        if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+            msg = deniedHelp(s.id);
+        } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
+            msg = `No ${s.id === 'mic' ? 'microphone' : 'camera'} found on this device. Tap Skip.`;
+        } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') {
+            msg = `${s.id === 'mic' ? 'Microphone' : 'Camera'} is in use by another app. Close it and try again.`;
+        } else if (e.name === 'OverconstrainedError') {
+            msg = 'Camera constraints not met. Tap Skip and use Image Upload instead.';
+        } else if (!isSecure) {
+            msg = 'Blocked: open via localhost or https (see warning below).';
+        } else {
+            msg = e.message || 'Unknown error. Tap Skip to continue.';
+        }
+        setPermStatus('✗ ' + msg, 'err');
+    }
+}
+
+function deniedHelp(type) {
+    if (IS_SAFARI)  return `${type === 'mic' ? 'Mic' : 'Camera'} denied. Go to Safari → Settings → Websites to allow it, then reload.`;
+    if (IS_FIREFOX) return `${type === 'mic' ? 'Mic' : 'Camera'} denied. Click the 🔒 icon in the address bar → Permissions to allow it.`;
+    return `${type === 'mic' ? 'Mic' : 'Camera'} denied. Click the 🔒 icon in the address bar → Site Settings → Allow.`;
+}
+
+function skipCurrentPerm() {
+    setPermStatus('', '');
+    permStep++;
+    renderStep(permStep);
+}
+
+// Kick off step 0
+renderStep(0);
+
+function launchApp() {
+    document.getElementById('permGate').classList.add('hidden');
+    const app = document.getElementById('app');
+    app.style.cssText = 'display:flex;flex-direction:column;align-items:center;width:100%';
+
+    updatePill('micPill', micGranted);
+    updatePill('camPill', camGranted);
+
+    if (!micGranted) {
+        document.getElementById('micBtn').disabled = true;
+        document.getElementById('micBtn').title    = 'Microphone not permitted — tap to re-enable in browser settings';
+    }
+    if (!camGranted) {
+        document.getElementById('camBtn').disabled = true;
+        document.getElementById('camBtn').title    = 'Camera not permitted — use Image Upload instead';
+    }
+    initSpeech();
+    loadTesseract();
+}
+
+function updatePill(id, granted) {
+    const el = document.getElementById(id);
+    el.className = 'pill ' + (granted ? 'granted' : 'denied');
+}
+
+// ════════════════════════════════════════════════════════
+//  TESSERACT LOADER
+// ════════════════════════════════════════════════════════
+let Tesseract = null;
+
+function loadTesseract() {
+    const s = document.createElement('script');
+    s.src = 'tesseract.min.js';
+    s.onload  = () => { Tesseract = window.Tesseract; };
+    s.onerror = () => {
+        const s2 = document.createElement('script');
+        s2.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
+        s2.onload  = () => { Tesseract = window.Tesseract; };
+        s2.onerror = () => {};
+        document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+}
+
+// ════════════════════════════════════════════════════════
+//  SPEECH RECOGNITION — zero-lag, no repeat permission asks
+// ════════════════════════════════════════════════════════
+let recognition   = null;
+let isListening   = false;
+let srStarting    = false;   // guard: prevent overlapping .start() calls
+let srRestartTimer = null;   // debounce restart
+let lastTranscript = '';     // deduplicate identical results
+
+function initSpeech() {
+    if (!micGranted) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { showToast('Speech API not available in this browser', 'warn'); return; }
+
+    recognition = new SR();
+
+    // ── KEY SETTINGS ──────────────────────────────────────
+    // continuous:true     = one long session, browser holds the mic open
+    //                       so it does NOT re-ask permission on each restart
+    // interimResults:true = get words as you speak them (zero lag)
+    //                       we only act on isFinal:true results
+    // lang: force en-US for best digit recognition worldwide
+    recognition.continuous      = true;
+    recognition.interimResults  = true;
+    recognition.lang            = 'en-US';
+    recognition.maxAlternatives = 1;   // 3 alternatives causes extra processing lag
+
+    // Show live interim transcript (feedback while speaking)
+    recognition.onresult = (e) => {
+        let interimText = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+            const res = e.results[i];
+            if (res.isFinal) {
+                const transcript = res[0].transcript.trim();
+                // Deduplicate: skip if same as last processed result
+                if (transcript && transcript !== lastTranscript) {
+                    lastTranscript = transcript;
+                    extractNumbers(transcript, 'voice');
+                }
+            } else {
+                interimText += res[0].transcript;
+            }
+        }
+        // Show live preview of what's being heard
+        if (interimText) showStatus('Hearing: ' + interimText, 'proc');
+    };
+
+    recognition.onerror = (e) => {
+        console.warn('SR error:', e.error);
+        srStarting = false;
+
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+            // Permission was revoked mid-session — stop cleanly, don't re-ask
+            isListening = false;
+            srStarting  = false;
+            document.getElementById('micBtn').classList.remove('listening');
+            document.getElementById('micText').textContent = 'Speak';
+            showToast('Mic access was blocked. Check browser site settings.', 'err');
+            hideStatus();
+            return;
+        }
+
+        // 'no-speech' and 'aborted' are normal — browser timed out or we stopped it.
+        // Do NOT call stopMic() — just let onend handle the restart.
+        if (e.error === 'no-speech' || e.error === 'aborted') return;
+
+        // Any other error: show it but keep trying
+        showStatus('Mic issue: ' + e.error, 'err');
+        setTimeout(hideStatus, 2000);
+    };
+
+    recognition.onstart = () => {
+        srStarting = false;   // successfully started
+    };
+
+    recognition.onend = () => {
+        srStarting = false;
+        // Only restart if user hasn't tapped Stop
+        if (!isListening) return;
+
+        // Small delay before restart prevents rapid fire loops that
+        // cause some browsers to re-prompt for permission
+        clearTimeout(srRestartTimer);
+        srRestartTimer = setTimeout(() => {
+            if (!isListening || srStarting) return;
+            safeStart();
+        }, 250);
+    };
+}
+
+// ── safeStart — the ONLY place we call recognition.start() ──
+// Guards against: already-running, not-initialized, overlapping calls
+function safeStart() {
+    if (!recognition || srStarting) return;
+    srStarting = true;
+    lastTranscript = ''; // reset dedup on each fresh start
+    try {
+        recognition.start();
+    } catch(e) {
+        srStarting = false;
+        // 'InvalidStateError' means it's already running — that's fine
+        if (e.name !== 'InvalidStateError') console.warn('SR start error:', e);
+    }
+}
+
+function digitScore(t) {
+    return (t.match(/\d/g)||[]).length +
+           (t.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand)\b/gi)||[]).length;
+}
+
+// ════════════════════════════════════════════════════════
+//  NUMBER PARSING
+// ════════════════════════════════════════════════════════
+const SINGLES = {zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,
+    ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19};
+const TENS = {twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+
+function extractNumbers(text, source) {
+    const raw = text.toLowerCase()
+        .replace(/,/g,'').replace(/\band\b/g,' ')
+        .replace(/\bpoint\b/g,'.').replace(/\b(minus|negative)\b/g,'-');
+
+    const digits = raw.match(/-?\d+\.?\d*/g);
+    if (digits && digits.length) { digits.forEach(n => addNumber(parseFloat(n), source)); return; }
+
+    const words = raw.split(/\s+/).filter(Boolean);
+    let i = 0;
+    while (i < words.length) {
+        const w = words[i]; let val = null;
+        if (SINGLES[w] !== undefined) val = SINGLES[w];
+        else if (TENS[w] !== undefined) val = TENS[w];
+
+        if (val !== null) {
+            if (TENS[w] !== undefined && SINGLES[words[i+1]] !== undefined && SINGLES[words[i+1]] < 10) val += SINGLES[words[++i]];
+            if (words[i+1] === 'hundred') {
+                val = (val||1)*100; i++;
+                let rem = 0;
+                if (TENS[words[i+1]]) { rem = TENS[words[++i]]; if (SINGLES[words[i+1]] < 10) rem += SINGLES[words[++i]]; }
+                else if (SINGLES[words[i+1]] !== undefined) rem = SINGLES[words[++i]];
+                val += rem;
+            }
+            if (words[i+1] === 'thousand') {
+                val = (val||1)*1000; i++;
+                const sub = parseSpokenSegment(words.slice(i+1).join(' '));
+                if (sub > 0 && sub < 1000) { val += sub; i += 4; }
+            }
+            addNumber(val, source);
+        }
+        i++;
+    }
+}
+
+function parseSpokenSegment(text) {
+    let curr = 0;
+    for (const w of text.split(/\s+/).filter(Boolean)) {
+        if (SINGLES[w] !== undefined) curr += SINGLES[w];
+        else if (TENS[w] !== undefined) curr += TENS[w];
+        else if (w === 'hundred') curr = (curr||1)*100;
+        else break;
+    }
+    return curr;
+}
+
+// ════════════════════════════════════════════════════════
+//  APP STATE
+// ════════════════════════════════════════════════════════
+let numbers = [];
+let camStream = null;
+
+function addNumber(n, source) {
+    if (isNaN(n) || !isFinite(n)) return;
+    if (Math.abs(n) > 999999) { showToast('Number too large — skipped', 'warn'); return; }
+    numbers.push(n);
+    updateDisplay();
+    showStatus('+' + n.toLocaleString(), 'ok');
+    setTimeout(hideStatus, 1400);
+}
+
+function removeNumber(idx) {
+    const chips = document.querySelectorAll('.num-chip');
+    if (!chips[idx]) return;
+    chips[idx].classList.add('removing');
+    setTimeout(() => { numbers.splice(idx, 1); updateDisplay(); }, 290);
+}
+
+function updateDisplay() {
+    const list  = document.getElementById('numbersList');
+    const sumEl = document.getElementById('sumValue');
+    const sum   = numbers.reduce((a,b) => a+b, 0);
+
+    list.innerHTML = numbers.length === 0
+        ? `<span class="empty"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>Tap mic or camera to add numbers</span>`
+        : numbers.map((n,i) => `<span class="num-chip" onclick="removeNumber(${i})" title="Tap to remove">${n.toLocaleString()}</span>`).join('');
+
+    const nv = sum.toLocaleString();
+    if (sumEl.textContent !== nv) {
+        sumEl.classList.add('pop');
+        sumEl.textContent = nv;
+        setTimeout(() => sumEl.classList.remove('pop'), 300);
+    }
+}
+
+function clearAll() {
+    if (!numbers.length) return;
+    document.querySelectorAll('.num-chip').forEach((c,i) => setTimeout(() => c.classList.add('removing'), i*45));
+    setTimeout(() => { numbers = []; updateDisplay(); showToast('Cleared', 'ok'); },
+        document.querySelectorAll('.num-chip').length * 45 + 300);
+}
+
+// ════════════════════════════════════════════════════════
+//  MIC
+// ════════════════════════════════════════════════════════
+function toggleMic() {
+    if (!recognition) {
+        showToast('Speech not available — check permissions', 'err'); return;
+    }
+    isListening ? stopMic() : startMic();
+}
+
+function startMic() {
+    isListening = true;
+    document.getElementById('micBtn').classList.add('listening');
+    document.getElementById('micText').textContent = 'Listening…';
+    showStatus('Speak a number…', 'proc');
+    safeStart();
+}
+
+function stopMic() {
+    isListening = false;
+    srStarting  = false;
+    clearTimeout(srRestartTimer);
+    try { recognition.stop(); } catch(_) {}
+    document.getElementById('micBtn').classList.remove('listening');
+    document.getElementById('micText').textContent = 'Speak';
+    hideStatus();
+}
+
+// ════════════════════════════════════════════════════════
+//  CAMERA
+// ════════════════════════════════════════════════════════
+async function openCamera() {
+    if (!camGranted) { showToast('Camera permission not granted', 'err'); return; }
+    try {
+        camStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+            audio: false
+        });
+        const video = document.getElementById('video');
+        video.srcObject = camStream;
+
+        // wait for video to be ready
+        await new Promise(resolve => { video.onloadedmetadata = resolve; });
+        await video.play().catch(() => {});
+
+        const overlay = document.getElementById('camOverlay');
+        overlay.classList.add('active');
+        setTimeout(() => overlay.classList.add('in'), 10);
+        showStatus('Camera ready — tap shutter', 'proc');
+    } catch(e) {
+        showToast('Camera error: ' + (e.message || e.name), 'err');
+        console.error(e);
+    }
+}
+
+function closeCamera() {
+    const overlay = document.getElementById('camOverlay');
+    overlay.classList.remove('in');
+    setTimeout(() => {
+        overlay.classList.remove('active');
+        if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+        document.getElementById('video').srcObject = null;
+        document.getElementById('camWrap').classList.remove('scanning');
+        hideStatus();
+    }, 320);
+}
+
+async function capture() {
+    const video = document.getElementById('video');
+    if (!video.videoWidth) { showToast('Camera not ready yet', 'warn'); return; }
+
+    const wrap = document.getElementById('camWrap');
+    wrap.classList.add('scanning');
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    wrap.classList.remove('scanning');
+    closeCamera();
+
+    const resized = await resizeForAPI(canvas.toDataURL('image/jpeg', 0.92), 1600);
+    const base64  = resized.split(',')[1];
+    await runClaudeVisionOCR(base64, 'image/jpeg');
+}
+
+// ════════════════════════════════════════════════════════
+//  IMAGE UPLOAD
+// ════════════════════════════════════════════════════════
+function handleUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+        showStatus('Reading image with AI…', 'proc');
+        const resized = await resizeForAPI(ev.target.result, 1600);
+        const base64  = resized.split(',')[1];
+        const mime    = resized.match(/data:(.*?);/)?.[1] || 'image/jpeg';
+        await runClaudeVisionOCR(base64, mime);
+    };
+    reader.readAsDataURL(file);
+}
+
+// ── resize helper ────────────────────────────────────────
+function resizeForAPI(dataUrl, maxW) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+            if (img.width <= maxW) { resolve(dataUrl); return; }
+            const scale = maxW / img.width;
+            const c = document.createElement('canvas');
+            c.width  = maxW;
+            c.height = Math.round(img.height * scale);
+            const ctx = c.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            resolve(c.toDataURL('image/jpeg', 0.92));
+        };
+        img.src = dataUrl;
+    });
+}
+
+// ════════════════════════════════════════════════════════
+//  CLAUDE VISION OCR — primary engine for handwriting
+// ════════════════════════════════════════════════════════
+async function runClaudeVisionOCR(base64, mime) {
+    showStatus('AI reading handwriting…', 'proc');
+    try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'claude-sonnet-4-20250514',
+                max_tokens: 1000,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image',
+                            source: { type: 'base64', media_type: mime, data: base64 }
+                        },
+                        {
+                            type: 'text',
+                            text: `You are a precise number extraction engine. Look at this image and extract every numeric value written in it.
+
+CRITICAL RULES:
+1. The vertical red/blue line on the LEFT MARGIN of notebook/ledger paper is a page border — it is NOT the digit 1. Ignore it completely.
+2. A raised dot or middle dot (·) between digits is a DECIMAL POINT. So "146·4" means 146.4.
+3. Extract ALL numbers including decimals like 4576.8, 5454.27, 6000.26.
+4. Ignore any text words: labels, headings, "Date", "Fresh", units, etc.
+5. Each row of digits is one number. Do not split a number into parts.
+6. Return ONLY a raw JSON array of numbers. No explanation. No markdown. No text before or after.
+
+Example output format: [2000, 1354, 146.7, 123.8, 1111, 1234.56, 3000, 4576.8, 5454.27, 6000.26, 5026]`
+                        }
+                    ]
+                }]
+            })
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err?.error?.message || `API ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        const text = (data.content || []).map(b => b.text || '').join('').trim();
+
+        let parsed;
+        try {
+            const clean = text.replace(/```json|```/gi, '').trim();
+            parsed = JSON.parse(clean);
+        } catch {
+            const matches = text.match(/-?\d+(\.\d+)?/g);
+            parsed = matches ? matches.map(Number) : [];
+        }
+
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+            showToast('No numbers found in image', 'warn');
+            hideStatus();
+            return;
+        }
+
+        const candidates = parsed
+            .filter(n => typeof n === 'number' && isFinite(n) && !isNaN(n))
+            .map((num) => ({ num, conf: 99, text: String(num) }));
+
+        hideStatus();
+        showReviewModal(candidates);
+
+    } catch (err) {
+        hideStatus();
+        console.error('Claude Vision error:', err);
+        if (Tesseract) {
+            showToast('AI unavailable — using OCR fallback…', 'warn');
+            showStatus('Enhancing image…', 'proc');
+            const dataUrl = `data:${mime};base64,${base64}`;
+            const versions = await buildImageVersions(dataUrl);
+            await runMultiPassOCR(versions);
+        } else {
+            showToast('Scan failed: ' + err.message, 'err');
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════
+//  IMAGE PIPELINE — produce multiple preprocessed versions
+//  so multi-pass OCR can pick the best read for each token
+// ════════════════════════════════════════════════════════
+function buildImageVersions(dataUrl) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+            // Target width: 2400px max, upscale if smaller
+            const TARGET_W = 2400;
+            const scale    = img.width < TARGET_W ? Math.min(TARGET_W / img.width, 3) : 1;
+            const W = Math.round(img.width  * scale);
+            const H = Math.round(img.height * scale);
+
+            // ── helpers ──────────────────────────────────
+            function makeCanvas() {
+                const c = document.createElement('canvas');
+                c.width = W; c.height = H; return c;
+            }
+
+            function drawBase(canvas, smooth = true) {
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingEnabled = smooth;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, W, H);
+                return ctx;
+            }
+
+            // ── grayscale conversion ──────────────────────
+            function toGray(d) {
+                const g = new Float32Array(W * H);
+                for (let i = 0; i < W * H; i++)
+                    g[i] = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+                return g;
+            }
+
+            // ── Summed Area Table (O(1) box blur) ─────────
+            function buildSAT(g) {
+                const sat = new Float64Array(W * H);
+                for (let y = 0; y < H; y++) {
+                    for (let x = 0; x < W; x++) {
+                        const i = y*W+x;
+                        sat[i] = g[i]
+                            + (x > 0 ? sat[i-1] : 0)
+                            + (y > 0 ? sat[i-W] : 0)
+                            - (x > 0 && y > 0 ? sat[i-W-1] : 0);
+                    }
+                }
+                return sat;
+            }
+
+            function satSum(sat, x0,y0,x1,y1) {
+                x0 = Math.max(0,x0); y0 = Math.max(0,y0);
+                x1 = Math.min(W-1,x1); y1 = Math.min(H-1,y1);
+                let s = sat[y1*W+x1];
+                if (x0 > 0) s -= sat[y1*W+(x0-1)];
+                if (y0 > 0) s -= sat[(y0-1)*W+x1];
+                if (x0 > 0 && y0 > 0) s += sat[(y0-1)*W+(x0-1)];
+                return s;
+            }
+
+            // ── adaptive threshold via SAT ────────────────
+            function adaptiveThreshold(gray, R, bias) {
+                const sat = buildSAT(gray);
+                const out = new Uint8Array(W * H);
+                for (let y = 0; y < H; y++) {
+                    for (let x = 0; x < W; x++) {
+                        const area = (Math.min(x+R,W-1)-Math.max(x-R,0)+1) *
+                                     (Math.min(y+R,H-1)-Math.max(y-R,0)+1);
+                        const mean = satSum(sat,x-R,y-R,x+R,y+R) / area;
+                        out[y*W+x] = gray[y*W+x] < mean - bias ? 0 : 255;
+                    }
+                }
+                return out;
+            }
+
+            // ── write grayscale array back to canvas ──────
+            function writeGray(ctx, arr) {
+                const id = ctx.createImageData(W, H);
+                const d  = id.data;
+                for (let i = 0; i < W*H; i++) {
+                    d[i*4] = d[i*4+1] = d[i*4+2] = arr[i]; d[i*4+3] = 255;
+                }
+                ctx.putImageData(id, 0, 0);
+            }
+
+            // ── contrast stretch ──────────────────────────
+            function stretchContrast(g) {
+                let lo = 255, hi = 0;
+                for (let i = 0; i < g.length; i++) { if (g[i] < lo) lo = g[i]; if (g[i] > hi) hi = g[i]; }
+                const range = hi - lo || 1;
+                const out = new Float32Array(g.length);
+                for (let i = 0; i < g.length; i++) out[i] = (g[i]-lo)/range*255;
+                return out;
+            }
+
+            // ── unsharp mask ──────────────────────────────
+            function unsharp(g, amount = 1.2) {
+                // Gaussian blur radius 1 (3x3 kernel approx)
+                const sat = buildSAT(g);
+                const blur = new Float32Array(W*H);
+                for (let y = 0; y < H; y++)
+                    for (let x = 0; x < W; x++) {
+                        const area = (Math.min(x+2,W-1)-Math.max(x-2,0)+1)*
+                                     (Math.min(y+2,H-1)-Math.max(y-2,0)+1);
+                        blur[y*W+x] = satSum(sat,x-2,y-2,x+2,y+2)/area;
+                    }
+                const out = new Float32Array(W*H);
+                for (let i = 0; i < g.length; i++)
+                    out[i] = Math.max(0, Math.min(255, g[i] + amount*(g[i]-blur[i])));
+                return out;
+            }
+
+            // ══ BUILD VERSIONS ════════════════════════════
+
+            // V1 — adaptive threshold, moderate radius (handles shadows well)
+            const c1  = makeCanvas(); const ctx1 = drawBase(c1);
+            const id1 = ctx1.getImageData(0,0,W,H);
+            const g1  = toGray(id1.data);
+            writeGray(ctx1, adaptiveThreshold(g1, 25, 10));
+
+            // V2 — contrast-stretched + sharpened + tight threshold (crisp printed digits)
+            const c2  = makeCanvas(); const ctx2 = drawBase(c2);
+            const id2 = ctx2.getImageData(0,0,W,H);
+            const g2  = unsharp(stretchContrast(toGray(id2.data)), 1.5);
+            writeGray(ctx2, adaptiveThreshold(g2, 15, 6));
+
+            // V3 — inverted (white text on dark background)
+            const c3  = makeCanvas(); const ctx3 = drawBase(c3);
+            const id3 = ctx3.getImageData(0,0,W,H);
+            const g3raw = toGray(id3.data);
+            const g3inv = new Float32Array(g3raw.length);
+            for (let i = 0; i < g3raw.length; i++) g3inv[i] = 255 - g3raw[i];
+            writeGray(ctx3, adaptiveThreshold(g3inv, 25, 10));
+
+            resolve([
+                c1.toDataURL('image/png'),
+                c2.toDataURL('image/png'),
+                c3.toDataURL('image/png'),
+            ]);
+        };
+        img.src = dataUrl;
+    });
+}
+
+// ════════════════════════════════════════════════════════
+//  MULTI-PASS OCR — run all image versions, merge by confidence
+// ════════════════════════════════════════════════════════
+async function runMultiPassOCR(versions) {
+    showStatus('Running OCR pass 1/3…', 'proc');
+
+    // Run all passes in parallel
+    const passes = await Promise.all(versions.map((dataUrl, idx) =>
+        Tesseract.recognize(dataUrl, 'eng', {
+            logger: m => {
+                if (m.status === 'recognizing text')
+                    showStatus(`OCR pass ${idx+1}/3 — ${Math.round(m.progress*100)}%`, 'proc');
+            },
+        }).catch(() => null)
+    ));
+
+    // Collect all candidate words across passes, keyed by approximate position
+    // We bucket by grid cell to merge equivalent words from different passes
+    const buckets = new Map(); // key → best WordCandidate
+
+    for (const pass of passes) {
+        if (!pass) continue;
+        for (const word of (pass.data.words || [])) {
+            if (!word || word.confidence < 45) continue;
+            const raw = word.text.trim();
+            if (!raw) continue;
+            const num = parseNumericToken(raw);
+            if (num === null) continue;
+
+            // Grid cell key: snap bbox to 60px grid to merge near-identical words
+            const bx = Math.round((word.bbox?.x0 || 0) / 60);
+            const by = Math.round((word.bbox?.y0 || 0) / 60);
+            const key = `${bx}_${by}`;
+
+            const existing = buckets.get(key);
+            if (!existing || word.confidence > existing.conf) {
+                buckets.set(key, { num, conf: word.confidence, text: raw });
+            }
+        }
+    }
+
+    // Collect deduplicated results, sorted top-to-bottom left-to-right
+    const candidates = [...buckets.entries()]
+        .sort((a,b) => {
+            const [ax,ay] = a[0].split('_').map(Number);
+            const [bx,by] = b[0].split('_').map(Number);
+            return ay !== by ? ay-by : ax-bx;
+        })
+        .map(([,v]) => v);
+
+    hideStatus();
+
+    if (candidates.length === 0) {
+        showToast('No numbers found — try a clearer image', 'warn');
+        return;
+    }
+
+    // Show review modal so user can confirm/reject each number
+    showReviewModal(candidates);
+}
+
+// ════════════════════════════════════════════════════════
+//  TOKEN PARSER — strict, handles ₹/commas/decimals
+// ════════════════════════════════════════════════════════
+function parseNumericToken(raw) {
+    let s = raw;
+
+    // Strip leading symbols: currency, operators that aren't minus-for-negative
+    s = s.replace(/^[₹$€£¥#@!+\s]+/, '');
+
+    // Strip trailing non-numeric (units: kg, ml, %, cm, etc.)
+    // Only strip if there are digits before them
+    s = s.replace(/(?<=\d)[a-zA-Z%°]+$/, '');
+
+    // Remove thousands separators:
+    // Indian: 1,23,456 or 12,34,567 — commas not followed by exactly 3 digits
+    // Western: 1,234,567 — commas followed by exactly 3 digits
+    // Strategy: remove any comma between digits
+    s = s.replace(/(\d),(\d)/g, '$1$2'); // strip all digit-comma-digit sequences
+    // (repeat in case of multiple)
+    s = s.replace(/(\d),(\d)/g, '$1$2');
+
+    // Allow one leading minus sign
+    s = s.replace(/^[-—–]+/, '-');
+    if ((s.match(/-/g)||[]).length > 1) return null; // multiple minuses → reject
+
+    // Must match a number pattern now
+    const m = s.match(/^-?\d+(\.\d+)?$/);
+    if (!m) return null;
+
+    const n = parseFloat(s);
+    if (!isFinite(n) || isNaN(n)) return null;
+
+    // Reject suspiciously huge numbers (likely OCR noise)
+    if (Math.abs(n) > 9_999_999) return null;
+
+    return n;
+}
+
+// ════════════════════════════════════════════════════════
+//  REVIEW MODAL — user confirms each detected number
+// ════════════════════════════════════════════════════════
+function showReviewModal(candidates) {
+    // Remove any existing modal
+    document.getElementById('reviewModal')?.remove();
+
+    const selected = new Set(candidates.map((_,i) => i)); // all selected by default
+
+    const modal = document.createElement('div');
+    modal.id = 'reviewModal';
+    modal.style.cssText = `
+        position:fixed;inset:0;background:rgba(0,0,0,0.94);
+        display:flex;flex-direction:column;align-items:center;
+        justify-content:flex-start;z-index:500;
+        padding:24px 16px 32px;overflow-y:auto;
+        backdrop-filter:blur(12px);
+        animation:fadeSlideUp 0.35s ease both;
+    `;
+
+    modal.innerHTML = `
+        <div style="width:100%;max-width:420px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+                <div>
+                    <div style="font-size:1.1rem;font-weight:700;letter-spacing:-0.3px;">Review Detected Numbers</div>
+                    <div style="font-size:0.78rem;color:rgba(255,255,255,0.45);margin-top:3px;">Tap to deselect any you don't want</div>
+                </div>
+                <button id="reviewClose" style="
+                    width:36px;height:36px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);
+                    background:rgba(255,255,255,0.07);color:#fff;font-size:1rem;cursor:pointer;
+                    display:flex;align-items:center;justify-content:center;flex:none;
+                ">✕</button>
+            </div>
+
+            <div id="reviewGrid" style="
+                display:flex;flex-wrap:wrap;gap:10px;margin-bottom:22px;
+            "></div>
+
+            <div style="
+                background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+                border-radius:16px;padding:14px 18px;margin-bottom:20px;
+                display:flex;justify-content:space-between;align-items:center;
+            ">
+                <span style="font-size:0.78rem;color:rgba(255,255,255,0.45);font-weight:600;letter-spacing:.8px;text-transform:uppercase;">Preview Sum</span>
+                <span id="reviewSum" style="font-size:1.6rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-0.5px;">0</span>
+            </div>
+
+            <div style="display:flex;gap:10px;">
+                <button id="reviewSelectAll" style="
+                    flex:1;padding:13px;border-radius:14px;border:1px solid rgba(255,255,255,0.12);
+                    background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.7);
+                    font-size:0.85rem;font-weight:600;cursor:pointer;
+                ">Select All</button>
+                <button id="reviewAdd" style="
+                    flex:2;padding:13px;border-radius:14px;border:none;
+                    background:linear-gradient(135deg,#30d158,#34c759);color:#fff;
+                    font-size:0.95rem;font-weight:700;cursor:pointer;letter-spacing:-0.2px;
+                ">Add Selected Numbers</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Build chips
+    const grid = modal.querySelector('#reviewGrid');
+    candidates.forEach((c, i) => {
+        const chip = document.createElement('div');
+        chip.dataset.idx = i;
+        chip.style.cssText = `
+            padding:10px 18px;border-radius:14px;font-size:1rem;
+            font-weight:600;font-variant-numeric:tabular-nums;
+            cursor:pointer;transition:all 0.2s ease;user-select:none;
+            border:2px solid rgba(48,209,88,0.5);
+            background:rgba(48,209,88,0.12);color:#fff;
+            display:flex;flex-direction:column;align-items:center;gap:2px;
+        `;
+        chip.innerHTML = `
+            <span style="font-size:1.05rem">${c.num.toLocaleString()}</span>
+            <span style="font-size:0.62rem;color:rgba(255,255,255,0.4);font-weight:400">conf ${Math.round(c.conf)}%</span>
+        `;
+        chip.addEventListener('click', () => {
+            if (selected.has(i)) {
+                selected.delete(i);
+                chip.style.borderColor = 'rgba(255,255,255,0.1)';
+                chip.style.background  = 'rgba(255,255,255,0.04)';
+                chip.style.opacity     = '0.45';
+            } else {
+                selected.add(i);
+                chip.style.borderColor = 'rgba(48,209,88,0.5)';
+                chip.style.background  = 'rgba(48,209,88,0.12)';
+                chip.style.opacity     = '1';
+            }
+            updatePreviewSum();
+        });
+        grid.appendChild(chip);
+    });
+
+    function updatePreviewSum() {
+        const sum = [...selected].reduce((acc, i) => acc + candidates[i].num, 0);
+        modal.querySelector('#reviewSum').textContent = sum.toLocaleString();
+        modal.querySelector('#reviewAdd').textContent =
+            selected.size > 0 ? `Add ${selected.size} Number${selected.size>1?'s':''}` : 'Nothing Selected';
+        modal.querySelector('#reviewAdd').style.opacity = selected.size > 0 ? '1' : '0.4';
+    }
+    updatePreviewSum();
+
+    modal.querySelector('#reviewClose').addEventListener('click', () => modal.remove());
+
+    modal.querySelector('#reviewSelectAll').addEventListener('click', () => {
+        candidates.forEach((_,i) => selected.add(i));
+        grid.querySelectorAll('[data-idx]').forEach(chip => {
+            chip.style.borderColor = 'rgba(48,209,88,0.5)';
+            chip.style.background  = 'rgba(48,209,88,0.12)';
+            chip.style.opacity     = '1';
+        });
+        updatePreviewSum();
+    });
+
+    modal.querySelector('#reviewAdd').addEventListener('click', () => {
+        if (selected.size === 0) return;
+        [...selected]
+            .sort((a,b) => a-b)
+            .forEach(i => addNumber(candidates[i].num, 'scan'));
+        showToast(`Added ${selected.size} number(s)`, 'ok');
+        modal.remove();
+    });
+}
+
+// ════════════════════════════════════════════════════════
+//  UI HELPERS
+// ════════════════════════════════════════════════════════
+function showStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = 'status on ' + (type||'');
+}
+function hideStatus() { document.getElementById('status').className = 'status'; }
+
+let toastTimer;
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + (type||'');
+    clearTimeout(toastTimer);
+    setTimeout(() => t.classList.add('show'), 10);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ════════════════════════════════════════════════════════
+//  AUTO-CHECK EXISTING PERMISSIONS
+//  If already granted (returning user), skip straight to app
+// ════════════════════════════════════════════════════════
+(async () => {
+    if (!HAS_PERMS) return;
+    try {
+        // Safari doesn't support camera query — wrap each independently
+        let mState = 'prompt', cState = 'prompt';
+        try { mState = (await navigator.permissions.query({ name: 'microphone' })).state; } catch(_){}
+        try { cState = (await navigator.permissions.query({ name: 'camera'      })).state; } catch(_){}
+
+        if (mState === 'granted') micGranted = true;
+        if (cState === 'granted') camGranted = true;
+
+        // Auto-advance past already-granted steps
+        if (micGranted && permStep === 0) permStep = 1;
+        if (camGranted && permStep === 1) permStep = 2;
+
+        if (permStep >= 2) {
+            launchApp();
+        } else {
+            renderStep(permStep); // re-render from correct step
+        }
+
+        // Watch for user changing permissions in browser settings mid-session
+        if (mState !== 'denied') {
+            try {
+                const mq = await navigator.permissions.query({ name: 'microphone' });
+                mq.onchange = () => { if (mq.state === 'granted') { micGranted = true; updatePill('micPill', true); document.getElementById('micBtn').disabled = false; } };
+            } catch(_){}
+        }
+    } catch(_) {}
+})();
+// ════════════════════════════════════════════════════════
+//  MANUAL ENTRY
+// ════════════════════════════════════════════════════════
+function manualAdd() {
+    const input = document.getElementById('manualInput');
+    const n = parseFloat(input.value);
+    if (isNaN(n) || !isFinite(n)) {
+        input.style.borderColor = 'rgba(255,55,95,0.6)';
+        setTimeout(() => input.style.borderColor = '', 800);
+        return;
+    }
+    addNumber(n, 'manual');
+    input.value = '';
+    input.focus();
+}
+
+</script>
+</body>
+</html>
